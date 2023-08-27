@@ -28,10 +28,7 @@ enum SAMPLE_FIELD_ID
     SFI_FULLNAME_TEXT     = 7,
     SFI_DISPLAYNAME_TEXT  = 8,
     SFI_LOGONSTATUS_TEXT  = 9,
-    SFI_CHECKBOX          = 10,
-    SFI_EDIT_TEXT         = 11,
-    SFI_COMBOBOX          = 12,
-    SFI_NUM_FIELDS        = 13,  // Note: if new fields are added, keep NUM_FIELDS last.  This is used as a count of the number of fields
+    SFI_NUM_FIELDS        = 10,  // Note: if new fields are added, keep NUM_FIELDS last.  This is used as a count of the number of fields
 };
 
 // The first value indicates when the tile is displayed (selected, not selected)
@@ -61,9 +58,6 @@ static const FIELD_STATE_PAIR s_rgFieldStatePairs[] =
     { CPFS_DISPLAY_IN_SELECTED_TILE,   CPFIS_NONE    },    // SFI_FULLNAME_TEXT
     { CPFS_DISPLAY_IN_SELECTED_TILE,   CPFIS_NONE    },    // SFI_DISPLAYNAME_TEXT
     { CPFS_DISPLAY_IN_SELECTED_TILE,   CPFIS_NONE    },    // SFI_LOGONSTATUS_TEXT
-    { CPFS_DISPLAY_IN_SELECTED_TILE,   CPFIS_NONE    },    // SFI_CHECKBOX
-    { CPFS_DISPLAY_IN_SELECTED_TILE,   CPFIS_NONE    },    // SFI_EDIT_TEXT
-    { CPFS_DISPLAY_IN_SELECTED_TILE,   CPFIS_NONE    },    // SFI_COMBOBOX
 };
 
 // Field descriptors for unlock and logon.
@@ -74,17 +68,14 @@ static const CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR s_rgCredProvFieldDescriptors[]
 {
     { SFI_TILEIMAGE,         CPFT_TILE_IMAGE,    L"Image",                      CPFG_CREDENTIAL_PROVIDER_LOGO  },
     { SFI_LABEL,             CPFT_SMALL_TEXT,    L"Tooltip",                    CPFG_CREDENTIAL_PROVIDER_LABEL },
-    { SFI_LARGE_TEXT,        CPFT_LARGE_TEXT,    L"Sample Credential Provider"                                 },
-    { SFI_PASSWORD,          CPFT_PASSWORD_TEXT, L"Password text"                                              },
+    { SFI_LARGE_TEXT,        CPFT_LARGE_TEXT,    L"LINE Notify Credential Provider"                            },
+    { SFI_PASSWORD,          CPFT_PASSWORD_TEXT, L"Received code"                                              },
     { SFI_SUBMIT_BUTTON,     CPFT_SUBMIT_BUTTON, L"Submit"                                                     },
-    { SFI_LAUNCHWINDOW_LINK, CPFT_COMMAND_LINK,  L"Launch helper window"                                       },
+    { SFI_LAUNCHWINDOW_LINK, CPFT_COMMAND_LINK,  L"Resend"                                                     },
     { SFI_HIDECONTROLS_LINK, CPFT_COMMAND_LINK,  L"Hide additional controls"                                   },
     { SFI_FULLNAME_TEXT,     CPFT_SMALL_TEXT,    L"Full name: "                                                },
     { SFI_DISPLAYNAME_TEXT,  CPFT_SMALL_TEXT,    L"Display name: "                                             },
     { SFI_LOGONSTATUS_TEXT,  CPFT_SMALL_TEXT,    L"Logon status: "                                             },
-    { SFI_CHECKBOX,          CPFT_CHECKBOX,      L"Checkbox"                                                   },
-    { SFI_EDIT_TEXT,         CPFT_EDIT_TEXT,     L"Edit text"                                                  },
-    { SFI_COMBOBOX,          CPFT_COMBOBOX,      L"Combobox"                                                   },
 };
 
 static const PWSTR s_rgComboBoxStrings[] =
@@ -93,3 +84,5 @@ static const PWSTR s_rgComboBoxStrings[] =
     L"Second",
     L"Third",
 };
+
+static const PWSTR s_rgCredProvRegistryKey = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\Credential Providers\\{5fd3d285-0dd9-4362-8855-e0abaacd4af6}";

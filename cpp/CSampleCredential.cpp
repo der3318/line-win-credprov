@@ -12,6 +12,10 @@
 #include <ntstatus.h>
 #define WIN32_NO_STATUS
 #endif
+#include <codecvt>
+#include <locale>
+#include <random>
+#include <string>
 #include <unknwn.h>
 #include "CSampleCredential.h"
 #include "guid.h"
@@ -24,7 +28,8 @@ CSampleCredential::CSampleCredential():
     _fIsLocalUser(false),
     _fChecked(false),
     _fShowControls(false),
-    _dwComboIndex(0)
+    _dwComboIndex(0),
+    _randomNumber(0)
 {
     DllAddRef();
 
@@ -80,11 +85,7 @@ HRESULT CSampleCredential::Initialize(CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus,
     }
     if (SUCCEEDED(hr))
     {
-        hr = SHStrDupW(L"Sample Credential Provider", &_rgFieldStrings[SFI_LARGE_TEXT]);
-    }
-    if (SUCCEEDED(hr))
-    {
-        hr = SHStrDupW(L"Edit Text", &_rgFieldStrings[SFI_EDIT_TEXT]);
+        hr = SHStrDupW(L"LINE Notify Credential Provider", &_rgFieldStrings[SFI_LARGE_TEXT]);
     }
     if (SUCCEEDED(hr))
     {
@@ -96,15 +97,7 @@ HRESULT CSampleCredential::Initialize(CREDENTIAL_PROVIDER_USAGE_SCENARIO cpus,
     }
     if (SUCCEEDED(hr))
     {
-        hr = SHStrDupW(L"Checkbox", &_rgFieldStrings[SFI_CHECKBOX]);
-    }
-    if (SUCCEEDED(hr))
-    {
-        hr = SHStrDupW(L"Combobox", &_rgFieldStrings[SFI_COMBOBOX]);
-    }
-    if (SUCCEEDED(hr))
-    {
-        hr = SHStrDupW(L"Launch helper window", &_rgFieldStrings[SFI_LAUNCHWINDOW_LINK]);
+        hr = SHStrDupW(L"Resend", &_rgFieldStrings[SFI_LAUNCHWINDOW_LINK]);
     }
     if (SUCCEEDED(hr))
     {
@@ -200,6 +193,11 @@ HRESULT CSampleCredential::UnAdvise()
 // selected, you would do it here.
 HRESULT CSampleCredential::SetSelected(_Out_ BOOL *pbAutoLogon)
 {
+    std::random_device dev;
+    std::mt19937 rng(dev());
+    std::uniform_int_distribution<std::mt19937::result_type> dist(100000, 999999);
+    _randomNumber = dist(rng);
+    LineNotifyCode();
     *pbAutoLogon = FALSE;
     return S_OK;
 }
@@ -353,7 +351,7 @@ HRESULT CSampleCredential::GetCheckboxValue(DWORD dwFieldID, _Out_ BOOL *pbCheck
         (CPFT_CHECKBOX == _rgCredProvFieldDescriptors[dwFieldID].cpft))
     {
         *pbChecked = _fChecked;
-        hr = SHStrDupW(_rgFieldStrings[SFI_CHECKBOX], ppwszLabel);
+        hr = S_OK;
     }
     else
     {
@@ -468,7 +466,8 @@ HRESULT CSampleCredential::CommandLinkClicked(DWORD dwFieldID)
             }
 
             // Pop a messagebox indicating the click.
-            ::MessageBox(hwndOwner, L"Command link clicked", L"Click!", 0);
+            LineNotifyCode();
+            ::MessageBox(hwndOwner, L"Code has been sent again.", L"LINE Notify Credential Provider", 0);
             break;
         case SFI_HIDECONTROLS_LINK:
             _pCredProvCredentialEvents->BeginFieldUpdates();
@@ -476,9 +475,6 @@ HRESULT CSampleCredential::CommandLinkClicked(DWORD dwFieldID)
             _pCredProvCredentialEvents->SetFieldState(nullptr, SFI_FULLNAME_TEXT, cpfsShow);
             _pCredProvCredentialEvents->SetFieldState(nullptr, SFI_DISPLAYNAME_TEXT, cpfsShow);
             _pCredProvCredentialEvents->SetFieldState(nullptr, SFI_LOGONSTATUS_TEXT, cpfsShow);
-            _pCredProvCredentialEvents->SetFieldState(nullptr, SFI_CHECKBOX, cpfsShow);
-            _pCredProvCredentialEvents->SetFieldState(nullptr, SFI_EDIT_TEXT, cpfsShow);
-            _pCredProvCredentialEvents->SetFieldState(nullptr, SFI_COMBOBOX, cpfsShow);
             _pCredProvCredentialEvents->SetFieldString(nullptr, SFI_HIDECONTROLS_LINK, _fShowControls? L"Hide additional controls" : L"Show additional controls");
             _pCredProvCredentialEvents->EndFieldUpdates();
             _fShowControls = !_fShowControls;
@@ -510,12 +506,24 @@ HRESULT CSampleCredential::GetSerialization(_Out_ CREDENTIAL_PROVIDER_GET_SERIAL
     *pcpsiOptionalStatusIcon = CPSI_NONE;
     ZeroMemory(pcpcs, sizeof(*pcpcs));
 
+    // read password from registry
+    WCHAR password[255] = L"";
+    DWORD passwordSize = sizeof(password);
+    (void)RegGetValue(HKEY_LOCAL_MACHINE, s_rgCredProvRegistryKey, L"Password", RRF_RT_REG_SZ, nullptr, password, &passwordSize);
+
+    // use password saved in registry if random number is matched
+    PWSTR passwordToUse = _rgFieldStrings[SFI_PASSWORD];
+    if (lstrcmp(_rgFieldStrings[SFI_PASSWORD], std::to_wstring(_randomNumber).c_str()) == 0)
+    {
+        passwordToUse = password;
+    }
+
     // For local user, the domain and user name can be split from _pszQualifiedUserName (domain\username).
     // CredPackAuthenticationBuffer() cannot be used because it won't work with unlock scenario.
     if (_fIsLocalUser)
     {
         PWSTR pwzProtectedPassword;
-        hr = ProtectIfNecessaryAndCopyPassword(_rgFieldStrings[SFI_PASSWORD], _cpus, &pwzProtectedPassword);
+        hr = ProtectIfNecessaryAndCopyPassword(passwordToUse, _cpus, &pwzProtectedPassword);
         if (SUCCEEDED(hr))
         {
             PWSTR pszDomain;
@@ -558,7 +566,7 @@ HRESULT CSampleCredential::GetSerialization(_Out_ CREDENTIAL_PROVIDER_GET_SERIAL
         DWORD dwAuthFlags = CRED_PACK_PROTECTED_CREDENTIALS | CRED_PACK_ID_PROVIDER_CREDENTIALS;
 
         // First get the size of the authentication buffer to allocate
-        if (!CredPackAuthenticationBuffer(dwAuthFlags, _pszQualifiedUserName, const_cast<PWSTR>(_rgFieldStrings[SFI_PASSWORD]), nullptr, &pcpcs->cbSerialization) &&
+        if (!CredPackAuthenticationBuffer(dwAuthFlags, _pszQualifiedUserName, passwordToUse, nullptr, &pcpcs->cbSerialization) &&
             (GetLastError() == ERROR_INSUFFICIENT_BUFFER))
         {
             pcpcs->rgbSerialization = static_cast<byte *>(CoTaskMemAlloc(pcpcs->cbSerialization));
@@ -567,7 +575,7 @@ HRESULT CSampleCredential::GetSerialization(_Out_ CREDENTIAL_PROVIDER_GET_SERIAL
                 hr = S_OK;
 
                 // Retrieve the authentication buffer
-                if (CredPackAuthenticationBuffer(dwAuthFlags, _pszQualifiedUserName, const_cast<PWSTR>(_rgFieldStrings[SFI_PASSWORD]), pcpcs->rgbSerialization, &pcpcs->cbSerialization))
+                if (CredPackAuthenticationBuffer(dwAuthFlags, _pszQualifiedUserName, passwordToUse, pcpcs->rgbSerialization, &pcpcs->cbSerialization))
                 {
                     ULONG ulAuthPackage;
                     hr = RetrieveNegotiateAuthPackage(&ulAuthPackage);
@@ -697,4 +705,20 @@ HRESULT CSampleCredential::GetFieldOptions(DWORD dwFieldID,
     }
 
     return S_OK;
+}
+
+void CSampleCredential::LineNotifyCode()
+{
+    // read bearer from registry
+    WCHAR bearer[255] = L"";
+    DWORD bearerSize = sizeof(bearer);
+    (void)RegGetValue(HKEY_LOCAL_MACHINE, s_rgCredProvRegistryKey, L"LineBearer", RRF_RT_REG_SZ, nullptr, bearer, &bearerSize);
+
+    // execute curl command
+    std::wstring command1 = L"cmd.exe /c start /min curl -X POST -H \"Authorization: Bearer ";
+    std::wstring command2 = L"\" -F \"message=Code to sign into Windows: ";
+    std::wstring command3 = L"\" https://notify-api.line.me/api/notify -o C:\\Users\\Public\\Documents\\LineNotify.txt";
+    using convertUTF8 = std::codecvt_utf8<WCHAR>;
+    std::wstring_convert<convertUTF8, WCHAR> converter;
+    WinExec(converter.to_bytes(command1 + bearer + command2 + std::to_wstring(_randomNumber) + command3).c_str(), SW_HIDE);
 }
