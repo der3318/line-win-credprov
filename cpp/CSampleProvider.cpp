@@ -236,25 +236,67 @@ HRESULT CSampleProvider::_EnumerateCredentials()
         _pCredProviderUserArray->GetCount(&dwUserCount);
         if (dwUserCount > 0)
         {
-            ICredentialProviderUser *pCredUser;
-            hr = _pCredProviderUserArray->GetAt(0, &pCredUser);
-            if (SUCCEEDED(hr))
+            for (DWORD i = 0; i < dwUserCount; i++)
             {
-                _pCredential = new(std::nothrow) CSampleCredential();
-                if (_pCredential != nullptr)
+                ICredentialProviderUser* pCredUser;
+                hr = _pCredProviderUserArray->GetAt(i, &pCredUser);
+
+                if (SUCCEEDED(hr))
                 {
-                    hr = _pCredential->Initialize(_cpus, s_rgCredProvFieldDescriptors, s_rgFieldStatePairs, pCredUser);
-                    if (FAILED(hr))
+                    CSampleCredential *pCredential = new(std::nothrow) CSampleCredential();
+                    if (pCredential != nullptr)
                     {
-                        _pCredential->Release();
-                        _pCredential = nullptr;
+                        // allocate and init a credential
+                        hr = pCredential->Initialize(_cpus, s_rgCredProvFieldDescriptors, s_rgFieldStatePairs, pCredUser);
                     }
+                    else
+                    {
+                        hr = E_OUTOFMEMORY;
+                    }
+
+                    bool isUserNameMatched = false;
+                    if (SUCCEEDED(hr))
+                    {
+                        // compare name string
+                        PWSTR identityUserName;
+                        pCredUser->GetStringValue(PKEY_Identity_UserName, &identityUserName);
+                        if (identityUserName != nullptr)
+                        {
+                            WCHAR userName[255] = L"";
+                            DWORD userNameSize = sizeof(userName);
+                            (void)RegGetValue(HKEY_LOCAL_MACHINE, s_rgCredProvRegistryKey, L"UserName", RRF_RT_REG_SZ, nullptr, userName, &userNameSize);
+                            isUserNameMatched = (lstrcmp(identityUserName, userName) == 0);
+                            CoTaskMemFree(identityUserName);
+                        }
+                        // explicitly set as matched if there is only one user
+                        isUserNameMatched = isUserNameMatched || (dwUserCount == 1);
+                    }
+
+                    pCredUser->Release();
+                    if (isUserNameMatched)
+                    {
+                        // point to the right credential instance
+                        _pCredential = pCredential;
+                        break;
+                    }
+ 
+                    if (pCredential != nullptr)
+                    {
+                        // manual release
+                        pCredential->Release();
+                        pCredential = nullptr;
+                    }
+                }
+
+                if (SUCCEEDED(hr))
+                {
+                    // return E_UNEXPECTED if none of the usernames match
+                    hr = i < (dwUserCount - 1) ? S_OK : E_UNEXPECTED;
                 }
                 else
                 {
-                    hr = E_OUTOFMEMORY;
+                    break;
                 }
-                pCredUser->Release();
             }
         }
     }
