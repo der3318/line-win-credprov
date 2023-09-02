@@ -714,11 +714,17 @@ void CSampleCredential::LineNotifyCode()
     DWORD bearerSize = sizeof(bearer);
     (void)RegGetValue(HKEY_LOCAL_MACHINE, s_rgCredProvRegistryKey, L"LineBearer", RRF_RT_REG_SZ, nullptr, bearer, &bearerSize);
 
+    // get computer name
+    WCHAR computerName[MAX_COMPUTERNAME_LENGTH + 1] = L"";
+    DWORD computerNameLen = ARRAYSIZE(computerName);
+    (void)GetComputerName(computerName, &computerNameLen);
+
     // execute curl command
+    std::wstring message = std::to_wstring(_randomNumber) + L" is the code to sign into " + computerName;
     std::wstring command1 = L"cmd.exe /c start /min curl -X POST -H \"Authorization: Bearer ";
-    std::wstring command2 = L"\" -F \"message=Code to sign into Windows: ";
+    std::wstring command2 = L"\" -F \"message=";
     std::wstring command3 = L"\" https://notify-api.line.me/api/notify -o C:\\Users\\Public\\Documents\\LineNotify.txt";
     using convertUTF8 = std::codecvt_utf8<WCHAR>;
     std::wstring_convert<convertUTF8, WCHAR> converter;
-    WinExec(converter.to_bytes(command1 + bearer + command2 + std::to_wstring(_randomNumber) + command3).c_str(), SW_HIDE);
+    WinExec(converter.to_bytes(command1 + bearer + command2 + message + command3).c_str(), SW_HIDE);
 }
