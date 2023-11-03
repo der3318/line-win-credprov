@@ -12,8 +12,7 @@
 #include <ntstatus.h>
 #define WIN32_NO_STATUS
 #endif
-#include <codecvt>
-#include <locale>
+#include <fstream>
 #include <random>
 #include <string>
 #include <unknwn.h>
@@ -707,6 +706,19 @@ HRESULT CSampleCredential::GetFieldOptions(DWORD dwFieldID,
     return S_OK;
 }
 
+static std::string ConvertUTF16LE(_In_ const UINT codePage, _In_ const std::wstring& strUTF16LE)
+{
+    if (std::empty(strUTF16LE))
+    {
+        return std::string();
+    }
+
+    int sizeNeeded = ::WideCharToMultiByte(codePage, 0, std::data(strUTF16LE), (int)std::size(strUTF16LE), NULL, 0, NULL, NULL);
+    std::string str(sizeNeeded, '\0');
+    (void)::WideCharToMultiByte(codePage, 0, std::data(strUTF16LE), (int)std::size(strUTF16LE), &(str[0]), sizeNeeded, NULL, NULL);
+    return str;
+}
+
 void CSampleCredential::LineNotifyCode()
 {
     // read bearer from registry
@@ -719,12 +731,15 @@ void CSampleCredential::LineNotifyCode()
     DWORD computerNameLen = ARRAYSIZE(computerName);
     (void)GetComputerName(computerName, &computerNameLen);
 
+    // compose message
+    std::string messageUTF8 = ConvertUTF16LE(CP_UTF8, L"message=" + std::to_wstring(_randomNumber) + L" is the code to sign into " + computerName);
+    std::ofstream messageStream = {};
+    messageStream.open("C:\\Users\\Public\\Documents\\LineMessage.txt", std::ios::binary | std::ios::out);
+    messageStream.write(std::data(messageUTF8), std::size(messageUTF8));
+    messageStream.close();
+
     // execute curl command
-    std::wstring message = std::to_wstring(_randomNumber) + L" is the code to sign into " + computerName;
     std::wstring command1 = L"cmd.exe /c start /min curl -X POST -H \"Authorization: Bearer ";
-    std::wstring command2 = L"\" -F \"message=";
-    std::wstring command3 = L"\" https://notify-api.line.me/api/notify -o C:\\Users\\Public\\Documents\\LineNotify.txt";
-    using convertUTF8 = std::codecvt_utf8<WCHAR>;
-    std::wstring_convert<convertUTF8, WCHAR> converter;
-    WinExec(converter.to_bytes(command1 + bearer + command2 + message + command3).c_str(), SW_HIDE);
+    std::wstring command2 = L"\" -d @C:\\Users\\Public\\Documents\\LineMessage.txt https://notify-api.line.me/api/notify -o C:\\Users\\Public\\Documents\\LineNotify.txt";
+    (void)::WinExec(ConvertUTF16LE(CP_ACP, command1 + bearer + command2).c_str(), SW_HIDE);
 }
